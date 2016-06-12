@@ -1,6 +1,6 @@
 name:                microphone
 version:             0.0.0
-synopsis:            read from a microphone a.k.a. @pipes-portaudio@
+synopsis:            a.k.a. @pipes-portaudio@: stream from a microphone 
 description:         read raw audio data from a microphone. @portaudio@ is cross-platform (across personal computers i.e. Linux/OSX/Windows). 
 homepage:            http://github.com/sboosali/microphone#readme
 license:             BSD3
@@ -80,7 +80,7 @@ library
              , either
              , managed
              , logging-effect
-             -- , pipes
+             , pipes
              -- , pipes-concurrency
              , errors
 

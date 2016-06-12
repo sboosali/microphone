@@ -21,9 +21,13 @@ import Numeric.Natural
 -}
 data MicrophoneEnvironment i = MicrophoneEnvironment
  { mConfig :: MicrophoneConfig i -- ^ 
- , mSwitch :: TVar Bool -- ^ @False@ turns the microphone off
- , mChannel :: TChan [i] -- ^ a buffered stream of audio data
+ , mSwitch :: TVar Bool -- ^ @False@ turns the microphone off TODO rm
+ , mChannel :: MicrophoneChannel i  -- ^ a buffered stream of audio data
  }
+-- TODO TChan (Maybe [i]) ??? For The pipes producer.
+
+type MicrophoneChannel i = TChan (Maybe [i])
+
 --TODO rename to microphone
 
 {-| a "simple" subset of 'OpenStream'.

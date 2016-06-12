@@ -42,15 +42,15 @@ import Microphone.Types
 import Microphone.PortAudio
 
 -- import Pipes.Concurrent
--- import Pipes
+import Pipes
 
 import Sound.PortAudio
 import Sound.PortAudio.Base
 
-import Control.Concurrent
+import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Foreign (ForeignPtr, peekArray,withForeignPtr, mallocForeignPtrArray)
-import qualified Data.Sequence as Sequence
+--import qualified Data.Sequence as Sequence
 import Data.Sequence (Seq)
 import System.IO
 
@@ -60,23 +60,54 @@ import System.IO
 
 --------------------------------------------------------------------------------
 
-{-| 
-
-blocks until 'silenceMicrophone' (i.e. /not/ lazy-IO i.e. unlike 'getContents').
-
-TODO Use pipes For streaming
+{-| A microphone produces audio (in chunks).
 
 -}
-getMicrophoneContents :: forall i. MicrophoneEnvironment i -> IO [i] -- TODO Array. Or expose seq? What can be efficiently converted to bytestring? Several seconds of audio is about hundreds of thousands of bytes.
-getMicrophoneContents MicrophoneEnvironment{..} = toList <$> go Sequence.empty
-  where
-  go :: Seq i -> IO (Seq i)
-  go is = do
-    (atomically $ tryReadTChan mChannel) >>= \case
-      Nothing -> do
-        return is
-      Just js -> do
-        go (is <> Sequence.fromList js) -- right-append
+microphone :: MicrophoneEnvironment i -> Producer i IO ()
+microphone environment = loop
+ where
+ loop = do
+   liftSTM (peekMicrophone environment) >>= \case
+     Nothing -> return() -- done
+     Just is -> do
+         each is
+         loop            -- continue
+
+{-|
+
+-}
+peekMicrophone :: MicrophoneEnvironment i -> STM (Maybe [i])
+peekMicrophone MicrophoneEnvironment{..} = do
+   readTChan mChannel --NOTE blocks
+
+ --TODO race condition where The producer blocksOn a clothes microphone?
+--PROVE mChannel never blocks after mSwitch? Rather, it returns a Nothing.
+
+{-old
+  is <- liftSTM $ do
+      readTVar mSwitch >>= \case
+        False -> return []
+        True  -> readTChan mChannel
+  each is
+-}
+
+-- {-| 
+
+-- blocks until 'silenceMicrophone' (i.e. /not/ lazy-IO i.e. unlike 'getContents').
+
+-- TODO Use pipes For streaming
+
+-- -}
+-- getMicrophoneContents :: forall i. MicrophoneEnvironment i -> IO [i] -- TODO Array. Or expose seq? What can be efficiently converted to bytestring? Several seconds of audio is about hundreds of thousands of bytes.
+-- getMicrophoneContents MicrophoneEnvironment{..} = toList <$> go Sequence.empty
+--   where
+--   go :: Seq i -> IO (Seq i)
+--   go is = do
+--     (atomically $ tryReadTChan mChannel) >>= \case
+--       Nothing -> do
+--         return is
+--       Just js -> do
+--         go (is <> Sequence.fromList js) -- right-append
 
   --old
   -- () <- whileMicrophoneOn environment (pause 1) -- block, checking every millisecond
@@ -105,24 +136,31 @@ listenMicrophone config = do
 
 {-| Stop listening to the microphone.
 
-terminate @portaudio@ by setting 'mSwitch'
+terminate @portaudio@ by setting 'mSwitch' TODO
+
+Mark that the stream is done with:
+
+@
+'mChannel' `'writeTChan'` 'Nothing'
+@
 
 -} -- closeMicrophone
 silenceMicrophone :: MicrophoneEnvironment i -> IO ()
 silenceMicrophone MicrophoneEnvironment{..} = do
   atomically $ do
-    mSwitch `writeTVar` False
--- TODO close a TChan?
+      mSwitch `writeTVar` False -- TODO necessary?
+      mChannel `writeTChan` Nothing -- TODO close a TChan?
 
 --------------------------------------------------------------------------------
 
-{-| read some data from the 'mChannel', blocking.
+{-| read some data from the 'mChannel'. even if it's closed (returning @[]@).
 
+blocking.
 
 -}
 readMicrophone :: MicrophoneEnvironment i -> IO [i]
-readMicrophone MicrophoneEnvironment{..} = do
-  atomically $ readTChan mChannel
+readMicrophone MicrophoneEnvironment{..} = atomically $ do
+  maybe [] id <$> readTChan mChannel
 
 {-| loops, calling 'writeMicrophone'. aborts after 'silenceMicrophone' is called.
 
@@ -131,12 +169,12 @@ writingMicrophone :: (StreamFormat i) => MicrophoneEnvironment i -> Stream i i -
 writingMicrophone environment stream = do
   _ <- whileMicrophoneOn environment $ do
     pause 10
-    displayVolume stream
+    _displayVolume stream
     void $ writeMicrophone environment stream
   return OK
 
-displayVolume :: Stream i i -> IO () --TODO Actually display the volume, and purify. Maybe with bidirectional pipes? 
-displayVolume _ = _display "."
+_displayVolume :: Stream i i -> IO () --TODO Actually display the volume, and purify. Maybe with bidirectional pipes? 
+_displayVolume _ = _display "."
   where
   _display x = putStr x >> putStr " " >> hFlush stdout
 
@@ -150,9 +188,7 @@ whileMicrophoneOn environment m =
 -}
 isMicrophoneOn :: MicrophoneEnvironment i -> IO Bool
 isMicrophoneOn MicrophoneEnvironment{..} = do
-  b <- atomically $ readTVar mSwitch
---  print b
-  return b
+  atomically $ readTVar mSwitch
 
 {-| read from the portaudio buffer, and send it to the channel
 
@@ -165,21 +201,25 @@ writeMicrophone MicrophoneEnvironment{..} stream = do
 
     --DEBUG nSamples & \x -> if x >= 0 then putStr (show x) >> putStr " " >> hFlush stdout else nothing
 
-    buffer <- mallocForeignPtrArray size
-        --NOTE mallocForeignPtrArray is resource-safe
-    _ <- readStream stream (fromIntegral nSamples) buffer
+    when (nSamples >= 0) $ do -- skip consumption, when there's no data
+        buffer <- mallocForeignPtrArray size
+            --NOTE mallocForeignPtrArray is resource-safe
+        _ <- readStream stream (fromIntegral nSamples) buffer
+        sendMicrophone mChannel (size,buffer)
+        return ()
 
-    sendMicrophone mChannel (size,buffer)
     return OK
+
+--old     unless (size <= 0)
 
 {-|
 
 -}
-sendMicrophone :: (StreamFormat i) => TChan [i] -> (Int, ForeignPtr i) -> IO ()
+sendMicrophone :: (StreamFormat i) => MicrophoneChannel i -> (Int, ForeignPtr i) -> IO ()
 sendMicrophone channel (size,_buffer) = withForeignPtr _buffer $ \buffer -> do
   is <- peekArray size buffer
 --  print $ length is
-  atomically $ writeTChan channel is
+  atomically $ writeTChan channel (Just is)
   -- StreamFormat subclasses Storable
 
 --old   traverse_ print is -- needs Show i

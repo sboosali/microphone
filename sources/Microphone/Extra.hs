@@ -16,6 +16,8 @@ import Data.Foldable as X (traverse_,toList)
 import Data.Monoid as X ((<>))
 import Control.Monad as X
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.STM (STM,atomically)
+import Control.Monad.IO.Class (MonadIO(..))
 
 nothing :: (Monad m) => m ()
 nothing = return ()
@@ -58,6 +60,8 @@ whileM mb m = loop
 pause :: Int -> IO ()
 pause = threadDelay . (*1000)
 
+liftSTM :: (MonadIO m) => STM a -> m a
+liftSTM = liftIO . atomically
 
 -- -- |Return a lazy list representing the contents of the supplied
 -- -- 'TChan', much like 'System.IO.hGetContents'.
