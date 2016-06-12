@@ -2,6 +2,8 @@
 module Microphone.Example where
 import Microphone()
 
+import Sound.PortAudio
+
 {-|
 @
 stack build && stack exec -- example-microphone
@@ -10,4 +12,8 @@ stack build && stack exec -- example-microphone
 main :: IO ()
 main = do
  putStrLn "(Microphone.Example...)"
-
+ withPortAudio $ do
+     n <- getNumDevices -- >>= either (fail.show) return
+     print n
+     return $ Right ()
+ return ()

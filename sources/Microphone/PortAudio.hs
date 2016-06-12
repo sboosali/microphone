@@ -82,18 +82,7 @@ suppressErrors 'noneFatal' >> m
 
 -}
 suppressErrors :: IsFatal -> PortAudio' a -> PortAudio' ()
-suppressErrors isFatal = alaPortAudio go
-  where
-  -- eitherT onFailure onSuccess :: EitherT e m a -> m (Either e ())
-  go = eitherT onFailure onSuccess >>> EitherT
-  -- ignore non-fatal errors
-
-  onFailure e = if isFatal e
-    then return (Left e)
-    else return OK -- TODO log them
-
-  -- ignore the result
-  onSuccess _ = return OK
+suppressErrors isFatal = alaPortAudio $ suppress isFatal (const nothing) -- TODO log them
 
 --old   onFailure e = if isFatal e then throwError e else return ()
 
@@ -102,11 +91,11 @@ alaPortAudio
 alaPortAudio f = getPortAudio >>> f >>> PortAudio
 
 -- | @= 'const' True@
-allFatal :: IsFatal
+allFatal :: e -> Bool
 allFatal = const True
 
 -- | @= 'const' False@
-noneFatal :: IsFatal
+noneFatal :: e -> Bool
 noneFatal = const False
 
 -- | @Right ()@
@@ -148,3 +137,44 @@ runPortAudioIgnoring = runPortAudio
  allFatal
  (const . return $ ())
  return
+
+--------------------------------------------------------------------------------
+
+{-| Don't abort the action on nonfatal errors.
+Instead, return unit.
+
+If all errors are fatal, this has no effect:
+
+@
+suppress 'allFatal' _ === id
+@
+
+If no errors are fatal, the computation never fails:
+
+@
+-- `m` is always performed
+suppress 'noneFatal' _ >> m
+@
+
+-}
+suppress
+  :: (Monad m)
+  => (e -> Bool)
+  -> (e -> m ())
+  -> EitherT e m a
+  -> EitherT e m ()
+suppress isFatal useError = go
+  where
+
+  -- eitherT onFailure onSuccess :: EitherT e m a -> m (Either e ())
+  go = eitherT onFailure onSuccess >>> EitherT
+
+  -- ignore non-fatal errors
+  onFailure e = if isFatal e
+    then return (Left e)
+    else do
+        useError e
+        return OK
+
+  -- ignore the result
+  onSuccess _ = return OK
