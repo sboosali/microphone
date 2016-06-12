@@ -19,7 +19,12 @@ import Numeric.Natural
 {-|
 
 -}
-type Microphone = TChan
+data MicrophoneEnvironment i = MicrophoneEnvironment
+ { mConfig :: MicrophoneConfig i -- ^ 
+ , mSwitch :: TVar Bool -- ^ @False@ turns the microphone off
+ , mChannel :: TChan [i] -- ^ a buffered stream of audio data
+ }
+--TODO rename to microphone
 
 {-| a "simple" subset of 'OpenStream'.
 

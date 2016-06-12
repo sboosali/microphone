@@ -1,4 +1,39 @@
 {-# LANGUAGE RecordWildCards, NamedFieldPuns, ScopedTypeVariables, LambdaCase #-}
+{-|
+
+e.g. Non-streaming. Get the raw audio data from a microphone session:
+
+@
+import "Microphone.Streaming"
+import "Control.Concurrent" ('forkIO')
+import "Data.Int"           ('Data.Int.Int16')
+
+main = do
+  audio <- listenUntilUserPressesReturn 'defaultMicrophoneConfig'
+  print audio
+
+listenUntilUserPressesReturn :: 'MicrophoneConfig' Int16 -> IO [Int16]
+listenUntilUserPressesReturn config = do
+
+ microphone <- 'listenMicrophone' config  -- start
+
+ _ <- forkIO $ do
+     _ <- 'getLine'                       -- blocks
+     'silenceMicrophone' microphone       -- stop
+
+ audio <- 'getMicrophoneContents' microphone
+ return audio
+@
+
+e.g. Streaming. Get chunks of raw audio data from a microphone:
+
+@
+TODO
+@
+
+(the @portaudio@ library is symmetric with respect to input/output device. So, the functions here should work for writing audio to the "speakers", with some minimal modifications. e.g. reading from instead of writing to the channel.)
+
+-}
 module Microphone.Streaming where
 import Microphone.Extra
 import Microphone.Types
@@ -10,10 +45,166 @@ import Microphone.PortAudio
 import Sound.PortAudio
 import Sound.PortAudio.Base
 
---import Control.Concurrent (threadDelay)
--- import Control.Concurrent.STM
---import Control.Exception (throwIO)
---import Foreign.C (CInt)
+import Control.Concurrent
+import Control.Concurrent.STM
+import Foreign (ForeignPtr, peekArray,withForeignPtr, mallocForeignPtrArray)
+import qualified Data.Sequence as Sequence
+import Data.Sequence (Seq)
+
+{-|
+
+-}
+
+--------------------------------------------------------------------------------
+
+{-| 
+
+blocks until 'silenceMicrophone' (i.e. /not/ lazy-IO i.e. unlike 'getContents').
+
+TODO Use pipes For streaming
+
+-}
+getMicrophoneContents :: forall i. MicrophoneEnvironment i -> IO [i]
+getMicrophoneContents microphone = toList <$> go Sequence.empty
+  where
+  go :: Seq i -> IO (Seq i)
+  go is = do
+    isMicrophoneOn microphone >>= \case
+      True  -> do
+        js <- readMicrophone microphone
+        go (is <> Sequence.fromList js) -- right-append
+      False -> do
+        return is
+
+  --old
+  -- () <- whileMicrophoneOn environment (pause 1) -- block, checking every millisecond
+  -- whileJustM $ tryReadTChan mChannel
+  -- return []
+
+{-| Start listening to the microphone.
+
+Forks a thread: a "bracket" that acquires portaudio and an input stream, and then releases them on 'silenceMicrophone'; calls 'writingMicrophone' with the acquired stream.
+
+-} -- openMicrophone
+listenMicrophone :: (StreamFormat i) => MicrophoneConfig i -> IO (MicrophoneEnvironment i)
+listenMicrophone config = do
+
+  environment <- newMicrophoneEnvironment config
+
+  _ <- forkIO $ void $ withPortAudio $ do
+      streamConfig <- fromMicrophoneConfig config
+      withStream' streamConfig $ \stream -> do -- TODO managed
+          _ <- writingMicrophone environment stream
+          return OK
+
+  return environment
+
+{-| Stop listening to the microphone.
+
+terminate @portaudio@ by setting 'mSwitch'
+
+-} -- closeMicrophone
+silenceMicrophone :: MicrophoneEnvironment i -> IO ()
+silenceMicrophone MicrophoneEnvironment{..} = do
+  atomically $ do
+    mSwitch `writeTVar` False
+-- TODO close a TChan?
+
+--------------------------------------------------------------------------------
+
+{-| read some data from the 'mChannel', blocking.
+
+
+-}
+readMicrophone :: MicrophoneEnvironment i -> IO [i]
+readMicrophone MicrophoneEnvironment{..} = do
+  atomically $ readTChan mChannel
+
+{-| loops, calling 'writeMicrophone'. aborts after 'silenceMicrophone' is called.
+
+-}
+writingMicrophone :: (StreamFormat i) => MicrophoneEnvironment i -> Stream i i -> PortAudio ()
+writingMicrophone environment stream = do
+  _ <- whileMicrophoneOn environment $ do
+    void $ writeMicrophone environment stream
+  return OK
+
+whileMicrophoneOn :: MicrophoneEnvironment i -> (IO () -> IO ())
+whileMicrophoneOn environment m =
+  whileM (environment&isMicrophoneOn) m
+
+{-|
+
+-}
+isMicrophoneOn :: MicrophoneEnvironment i -> IO Bool
+isMicrophoneOn MicrophoneEnvironment{..} = do
+  atomically $ readTVar mSwitch
+
+{-| read from the portaudio buffer, and send it to the channel
+
+-}
+writeMicrophone :: (StreamFormat i) => MicrophoneEnvironment i -> Stream i i -> PortAudio ()
+writeMicrophone MicrophoneEnvironment{..} stream = do
+    Right nSamples <- readAvailable stream --TODO partial
+    let nChannels = fromIntegral $ mConfig&mChannelCount
+    let size = nChannels * nSamples
+
+    buffer <- mallocForeignPtrArray size
+        --NOTE mallocForeignPtrArray is resource-safe
+    _ <- readStream stream (fromIntegral nSamples) buffer
+
+    sendMicrophone mChannel (size,buffer)
+    return OK
+
+{-|
+
+-}
+sendMicrophone :: (StreamFormat i) => TChan [i] -> (Int, ForeignPtr i) -> IO ()
+sendMicrophone channel (size,_buffer) = withForeignPtr _buffer $ \buffer -> do
+  is <- peekArray size buffer
+  atomically $ writeTChan channel is
+  -- StreamFormat subclasses Storable
+
+-- TODO Stream i Void i.e. ignore speakers. Like type-level Nothing.
+
+--------------------------------------------------------------------------------
+
+-- | (new mutable variables)
+newMicrophoneEnvironment :: MicrophoneConfig i -> IO (MicrophoneEnvironment i)
+newMicrophoneEnvironment mConfig = do
+  mChannel <- newTChanIO
+  mSwitch <- newTVarIO True
+  return MicrophoneEnvironment{..}
+
+fromMicrophoneConfig
+  :: (StreamFormat i)
+  => MicrophoneConfig i
+  -> IO (OpenStream i i)
+fromMicrophoneConfig MicrophoneConfig{..} = do
+
+  device <- mInputDevice & maybe
+      getDefaultInputStream
+      return
+
+  let spChannelCount = mChannelCount&fromIntegral
+  let sInput = Just (defaultStreamParameters device){spChannelCount}
+
+  return $ defaultOpenStream
+   { sSampleRate = mSampleRate
+   , sFlags = mFlags
+   , sInput
+   }
+
+getDefaultInputStream :: IO PaDeviceIndex --TODO PortAudio
+getDefaultInputStream = do
+  (device,_) <- getDefaultInputInfo >>= \case --  (defaultInputDevice,_) <- getDefaultInputInfo --TODO EitherT
+
+    Left e -> fail (show e) -- throwM e
+    Right a -> return a
+
+  return device
+
+--------------------------------------------------------------------------------
 
 {-|
 
@@ -71,75 +262,7 @@ RAW Audio format or just RAW Audio is an audio file format for storing uncompres
 
 -}
 
-{-|
-
--}
-
---------------------------------------------------------------------------------
-
-fromMicrophoneConfig
-  :: (StreamFormat i)
-  => MicrophoneConfig i
-  -> IO (OpenStream i i)
-fromMicrophoneConfig MicrophoneConfig{..} = do
-
-  device <- mInputDevice & maybe
-      getDefaultInputStream
-      return
-
-  let spChannelCount = mChannelCount&fromIntegral
-  let sInput = Just (defaultStreamParameters device){spChannelCount}
-  
-  return $ defaultOpenStream
-   { sSampleRate = mSampleRate
-   , sFlags = mFlags
-   , sInput
-   }
-
-getDefaultInputStream :: IO PaDeviceIndex --TODO PortAudio
-getDefaultInputStream = do
-  (device,_) <- getDefaultInputInfo >>= \case --  (defaultInputDevice,_) <- getDefaultInputInfo --TODO EitherT
-
-    Left e -> fail (show e) -- throwM e
-    Right a -> return a
-
-  return device
-
-
--- {-|
-
--- -}
--- newMicrophone :: IO ()
--- newMicrophone = withPortAudio $ do
---   vAudio <- newTVarIO Seq.empty
-
---   stream <- initPortAudio sFramesPerBuffer
-
---   _ <- forkIO $ forever $ do
---     let nChannels = 1 --TODO
---     Right nSamples <- readAvailable stream
---     let nSize = nChannels * nSamples
---     buffer <- mallocForeignPtrArray nSize  --TODO resource-safety
---     _ <- readStream  stream (fromIntegral nSamples) buffer
---     _ <- writeStream stream (fromIntegral nSamples) buffer
---     -- printBPSBuffer nSize buffer
---     appendAudio vAudio nSize buffer
---     return ()
-
---   where
---   sFramesPerBuffer = 0x800
-
--- {-|
-
--- -}
--- appendAudio :: TVar PCM -> Int -> ForeignPtr BPS -> IO ()
--- appendAudio var size _buffer = withForeignPtr _buffer $ \buffer -> do
---   is <- peekArray size buffer
---   atomically $ modifyTVar var (<> Seq.fromList is)
---     -- Disk usage grows polynomially, when saved. Instead, don't depend, and just save chunks
-
 {-
-
 readStream  :: Stream input output -> CULong -> ForeignPtr input  -> IO ()
 writeStream :: Stream input output -> CULong -> ForeignPtr output -> IO ()
 
@@ -149,67 +272,14 @@ its length must be the number of frames times the channels in the underlying str
 mallocForeignPtrArray :: Storable a => Int -> IO (ForeignPtr a)
 
 "It uses pinned memory in the garbage collected heap, so the ForeignPtr does not require a finalizer to free the memory. Use of mallocForeignPtr and associated functions is strongly recommended in preference to newForeignPtr with a finalizer."
-
 -}
 
--- initPortAudio :: Int -> IO (Stream BPS BPS)
--- initPortAudio sFramesPerBuffer = do
---   Nothing <- initialize
---   Right (microphone,_) <- getDefaultInputInfo
---   Right (speaker,   _) <- getDefaultOutputInfo
+{-(TODO like 'getContents'?)
 
---   let sInput =
---         let
---            spDevice           = microphone
---            spChannelCount     = 1
---            spSuggestedLatency = PaTime 0.1 -- fromIntegral 0.1
---         in Just StreamParameters{..}
+no, getContents calls hGetContents calls lazyRead calls unsafeInterleaveIO
 
---   let sOutput =
---         let
---            spDevice           = speaker
---            spChannelCount     = 1
---            spSuggestedLatency = PaTime 0.1
---         in Just StreamParameters{..}
-
---   let sCallback = Nothing
-
---   let _stream = defaultOpenStream
---                  { sInput
---                  , sOutput
---                  , sSampleRate = 16000
---                  , sFramesPerBuffer = Just sFramesPerBuffer
---                  , sCallback
---                  }
-
---   Right (stream :: Stream BPS BPS) <- openStream' _stream
-
---   Nothing <- startStream stream
---   -- let zeroBlock = replicate sFramesPerBuffer [0]
---   --TODO Nothing <- writeStream stream zeroBlock sFramesPerBuffer
---   return stream
-
--- {-|
-
--- -}
--- openStream'
---   :: (StreamFormat input, StreamFormat output)
---   => OpenStream input output
---   -> PortAudio (Stream input output)
--- openStream' OpenStream{..}
---   = openStream sInput sOutput sSampleRate sFramesPerBuffer sFlags sCallback sFinalizer
-
-{-|
+http://hackage.haskell.org/package/base-4.9.0.0/docs/src/GHC.IO.Handle.Text.html#lazyRead
 
 -}
-withStream'
-  :: (StreamFormat input, StreamFormat output)
- => OpenStream input output
- -> (Stream input output -> PortAudio a)
- -> PortAudio a
-
-withStream' OpenStream{..}
-  = withStream sInput sOutput sSampleRate sFramesPerBuffer sFlags sCallback sFinalizer
 
 --------------------------------------------------------------------------------
-

@@ -8,7 +8,7 @@
 -}
 module Microphone.PortAudio where
 import Microphone.Extra
-import Microphone.Types()
+import Microphone.Types
 
 import Sound.PortAudio
 --import Sound.PortAudio.Base
@@ -55,8 +55,14 @@ newtype PortAudioT m a = PortAudio { getPortAudio ::
 
 -}
 
-{-| -}
-data Warnings = Warnings { getWarnings :: [Error] }
+{-| A list of nonfatal @portaudio@ errors
+(that have been 'suppress'ed).
+
+-}
+newtype Warnings = Warnings { getWarnings ::
+                                [Error]
+                            }
+ deriving (Show,Read,Eq,Ord,Monoid)
 
 type IsFatal = Error -> Bool
 
@@ -140,20 +146,34 @@ runPortAudioIgnoring = runPortAudio
 
 --------------------------------------------------------------------------------
 
+{-| wraps 'withStream'
+
+-}
+withStream'
+  :: (StreamFormat input, StreamFormat output)
+ => OpenStream input output
+ -> (Stream input output -> PortAudio a)
+ -> PortAudio a
+
+withStream' OpenStream{..}
+  = withStream sInput sOutput sSampleRate sFramesPerBuffer sFlags sCallback sFinalizer
+
+--------------------------------------------------------------------------------
+
 {-| Don't abort the action on nonfatal errors.
 Instead, return unit.
 
 If all errors are fatal, this has no effect:
 
 @
-suppress 'allFatal' _ === id
+suppress 'allFatal' 'nothing' === id
 @
 
 If no errors are fatal, the computation never fails:
 
 @
 -- `m` is always performed
-suppress 'noneFatal' _ >> m
+suppress 'noneFatal' 'nothing' >> m
 @
 
 -}
@@ -178,3 +198,5 @@ suppress isFatal useError = go
 
   -- ignore the result
   onSuccess _ = return OK
+
+--------------------------------------------------------------------------------

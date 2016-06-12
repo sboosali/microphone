@@ -12,7 +12,10 @@ import Data.Data as X (Data)
 
 import Control.Arrow as X ((>>>))
 import Data.Function as X ((&))
-import Data.Foldable as X (traverse_)
+import Data.Foldable as X (traverse_,toList)
+import Data.Monoid as X ((<>))
+import Control.Monad as X
+import Control.Concurrent (threadDelay)
 
 nothing :: (Monad m) => m ()
 nothing = return ()
@@ -26,3 +29,50 @@ either2maybe = either (const Nothing) Just
 either2bool :: Either e a -> Bool
 either2bool = either (const False) (const True)
 
+whileM :: Monad m => m Bool -> m () -> m ()
+whileM mb m = loop
+  where
+  loop = do
+    b <- mb
+    if b
+    then do
+      m
+      loop
+    else
+      nothing
+
+-- whileJustM :: Monad m => m (Maybe a) -> (a -> m ()) -> m ()
+-- whileJustM =
+--   mb m = loop
+--   where
+--   loop = do
+--     b <- mb
+--     if b
+--     then do
+--       m
+--       loop
+--     else
+--       nothing
+
+-- | pause the thread for some milliseconds
+pause :: Int -> IO ()
+pause = threadDelay . (*1000)
+
+
+-- -- |Return a lazy list representing the contents of the supplied
+-- -- 'TChan', much like 'System.IO.hGetContents'.
+-- getTChanContents :: TChan a -> IO [a]
+-- getTChanContents ch
+--   = unsafeInterleaveIO (atomically $ do
+--         x  <- readTChan ch
+--         xs <- getTChanContents ch
+--         return (x:xs)
+--     )
+
+{-TODO You can't nest STM Transactions, so maybe unsafeInterleaveIO Will fail.
+
+: TChan a -> Chan a
+
+: TChan a -> IO [a]
+
+-}
