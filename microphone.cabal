@@ -54,6 +54,7 @@ library
  exposed-modules:
                  Microphone
                  Microphone.Types
+                 Microphone.Streaming
                  Microphone.PortAudio
                  Microphone.Orphans
 
@@ -65,13 +66,19 @@ library
                base >=4.7 && <5
              , stm
              , containers
+             , mtl
+             , transformers
 
              , deepseq
              , hashable
              , semigroups
 
+             , either
+             , managed
+             , logging-effect
              -- , pipes
              -- , pipes-concurrency
+             , errors
 
              , portaudio
 

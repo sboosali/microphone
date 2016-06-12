@@ -5,3 +5,4 @@ packages:
 
 extra-deps:
 - portaudio-0.2.4
+- logging-effect-1.0.1

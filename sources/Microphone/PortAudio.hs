@@ -1,120 +1,150 @@
-{-# LANGUAGE RecordWildCards, NamedFieldPuns, ScopedTypeVariables, LambdaCase #-}
+{-# LANGUAGE RecordWildCards, NamedFieldPuns, ScopedTypeVariables, LambdaCase, GeneralizedNewtypeDeriving, PatternSynonyms #-}
+{-| an idiomatic wrapper around 'Sound.PortAudio', providing:
+
+* parameter records (like @OpenProcess@)
+* 'EitherT', for failability
+* 'Managed', for resource management
+
+-}
 module Microphone.PortAudio where
 import Microphone.Extra
-import Microphone.Types
-
--- import Pipes.Concurrent
--- import Pipes
+import Microphone.Types()
 
 import Sound.PortAudio
-import Sound.PortAudio.Base
+--import Sound.PortAudio.Base
+--import Control.Monad.Managed
+import Control.Monad.Trans.Either
+import Control.Monad.Log
+-- import Control.Error
 
---import Control.Concurrent (threadDelay)
--- import Control.Concurrent.STM
---import Control.Exception (throwIO)
--- import Foreign.C (CInt)
+import Control.Exception (throwIO)
+-- import Control.Monad.Trans.Class
+import Control.Monad.IO.Class
+import Control.Monad.Error.Class hiding (Error)
 
-{-|
-
-@
-stack build && stack exec -- it portaudio
-@
-
-@
-brew install portaudio
-
-ls /usr/local/opt/portaudio/lib
-@
-
-more examples:
-
-https://github.com/sw17ch/portaudio/tree/master/examples
-
-The microphone data is formatted as PCM?
-
-haskell FLAC?
-
-
-flac:
-
-http://superuser.com/questions/553503/what-is-the-difference-between-wav-and-flac
-
-"""
-FLAC is a lossless audio codec (its container also happens to be called FLAC, but the main idea here is the actual codec).
-WAV, on the other hand, as a container can hold numerous kinds of audio codecs, but mostly, you'll find PCM-encoded audio.
-So, simply put: Take a WAV file with PCM-encoded audio, and the corresponding (mathematically equal) FLAC file will be a tad smaller. The downside is that FLAC is not as widely supported as WAV. For example, most (all?) operating systems won't play or convert FLAC files without extra software.
-"""
-
-@
-flac  --channels 1  --sample-rate 16000  --endian little  --sign signed  --bps 16  -o microphone.flac  --force-raw-format  microphone.wav
-@
-
-because:
-
-* portaudio sets the number of channels and the sample rate.
-* printing the buffer, I see negatives. samples are Int16.
-* the architecture of my machine is Intel (About This Mac: 1.8 GHz Intel Core i5)
-* bits per sample: samples are Int16.
-
-@
-flac  --channels 1  --sample-rate 16000  --endian little  --sign signed  --bps 8 -o final.flac  --force-raw-format  final.wav
-@
-
-@
-$ du *
-# the size of each file in the current directory, in bytes
-@
-
-RAW Audio format or just RAW Audio is an audio file format for storing uncompressed audio in raw form. Comparable to WAV or AIFF in size, RAW Audio file does not include any header information (sampling rate, bit depth, endian, or number of channels). Data can be written in PCM, IEEE 754 or ASCII.[citation needed]
-
-
--}
+{-| -}
 
 {-|
 
--}
-
---------------------------------------------------------------------------------
-
-fromMicrophoneConfig
-  :: (StreamFormat i)
-  => MicrophoneConfig i
-  -> IO (OpenStream i i)
-fromMicrophoneConfig MicrophoneConfig{..} = do
-
-  device <- mInputDevice & maybe
-      getDefaultInputStream
-      return
-
-  let spChannelCount = mChannelCount&fromIntegral
-  let sInput = Just (defaultStreamParameters device){spChannelCount}
-  
-  return $ defaultOpenStream
-   { sSampleRate = mSampleRate
-   , sFlags = mFlags
-   , sInput
-   }
-
-getDefaultInputStream :: IO PaDeviceIndex --TODO PortAudio
-getDefaultInputStream = do
-  (device,_) <- getDefaultInputInfo >>= \case --  (defaultInputDevice,_) <- getDefaultInputInfo --TODO EitherT
-
-    Left e -> fail (show e) -- throwM e
-    Right a -> return a
-
-  return device
-
-{-|
+TODO ReaderT IsFatal
 
 -}
-withStream'
-  :: (StreamFormat input, StreamFormat output)
- => OpenStream input output
- -> (Stream input output -> PortAudio a)
- -> PortAudio a
+newtype PortAudio' a = PortAudio { getPortAudio ::
+ EitherT Error (LoggingT Warnings IO) a
+-- LoggingT Warnings (EitherT Error IO) a
+ } deriving
+  ( Functor, Applicative, Monad
+  , MonadIO
+  , MonadError Error
+--  , MonadLog Warnings
+  )
 
-withStream' OpenStream{..}
-  = withStream sInput sOutput sSampleRate sFramesPerBuffer sFlags sCallback sFinalizer
+{-old
 
---------------------------------------------------------------------------------
+{-| -}
+type PortAudio' = PortAudioT IO
 
+{-| -}
+newtype PortAudioT m a = PortAudio { getPortAudio ::
+-- EitherT Error (LoggingT Warnings IO) a
+ LoggingT Warnings (EitherT Error m) a
+ } deriving
+  ( MonadLogging -- MonadEither
+  , MonadIO
+  )
+
+-}
+
+{-| -}
+data Warnings = Warnings { getWarnings :: [Error] }
+
+type IsFatal = Error -> Bool
+
+--old
+-- pattern WError :: Warnings
+-- pattern WError = Warnings []
+
+{-| Don't terminate the computation on nonfatal errors.
+Instead, return unit.
+
+If all errors are fatal, this has no effect:
+
+@
+suppressErrors 'allFatal' === id
+@
+
+If no errors are fatal, the computation never fails:
+
+@
+-- `m` is always performed
+suppressErrors 'noneFatal' >> m
+@
+
+-}
+suppressErrors :: IsFatal -> PortAudio' a -> PortAudio' ()
+suppressErrors isFatal = alaPortAudio go
+  where
+  -- eitherT onFailure onSuccess :: EitherT e m a -> m (Either e ())
+  go = eitherT onFailure onSuccess >>> EitherT
+  -- ignore non-fatal errors
+
+  onFailure e = if isFatal e
+    then return (Left e)
+    else return OK -- TODO log them
+
+  -- ignore the result
+  onSuccess _ = return OK
+
+--old   onFailure e = if isFatal e then throwError e else return ()
+
+alaPortAudio
+ :: (EitherT Error (LoggingT Warnings IO) a -> EitherT Error (LoggingT Warnings IO) b) -> (PortAudio' a -> PortAudio' b)
+alaPortAudio f = getPortAudio >>> f >>> PortAudio
+
+-- | @= 'const' True@
+allFatal :: IsFatal
+allFatal = const True
+
+-- | @= 'const' False@
+noneFatal :: IsFatal
+noneFatal = const False
+
+-- | @Right ()@
+pattern OK :: Either e ()
+pattern OK = Right ()
+
+-- deferErrors :: IsFatal
+-- deferErrors = const False
+
+{-| Eliminate an audio action.
+
+Provide handlers for any warnings and for the error.
+
+-}
+runPortAudio
+  :: IsFatal
+  -> Handler IO Warnings
+  -> (Either Error a -> IO b)
+  -> PortAudio' a
+  -> IO b
+runPortAudio isError useWarnings useErrors
+    = getPortAudio
+ >>> runEitherT
+ >>> (>>= (useErrors>>>liftIO))
+ >>> (runLoggingT&flip) (useWarnings)
+
+{-| For testing: print warnings and throw the error.
+-}
+runPortAudioSimple :: PortAudio' a -> IO a
+runPortAudioSimple = runPortAudio
+ allFatal
+ (getWarnings >>> traverse_ print)
+ (either throwIO return)
+
+{-| Recover the original @portaudio@ API: ignore warnings and pass the error through.
+-}
+runPortAudioIgnoring :: PortAudio' a -> IO (Either Error a)
+runPortAudioIgnoring = runPortAudio
+ allFatal
+ (const . return $ ())
+ return
