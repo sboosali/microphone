@@ -3,5 +3,5 @@ resolver: lts-6.1
 packages:
 - .
 
-extra-deps: []
-
+extra-deps:
+- portaudio-0.2.4

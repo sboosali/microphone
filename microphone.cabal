@@ -1,7 +1,7 @@
 name:                microphone
 version:             0.0.0
-synopsis:            TODO
-description:         TODO
+synopsis:            read from a microphone a.k.a. @pipes-portaudio@
+description:         read raw audio data from a microphone. @portaudio@ is cross-platform (across personal computers i.e. Linux/OSX/Windows). 
 homepage:            http://github.com/sboosali/microphone#readme
 license:             BSD3
 license-file:        LICENSE
@@ -52,15 +52,28 @@ library
                      ScopedTypeVariables StandaloneDeriving
 
  exposed-modules:
-  Microphone
-  Microphone.Types
+                 Microphone
+                 Microphone.Types
+                 Microphone.PortAudio
+                 Microphone.Orphans
 
 -- other-modules:
-  Microphone.Extra
-  Microphone.Example
+                 Microphone.Extra
+                 Microphone.Example
 
  build-depends:
-    base >=4.7 && <5
+               base >=4.7 && <5
+             , stm
+             , containers
+
+             , deepseq
+             , hashable
+             , semigroups
+
+             -- , pipes
+             -- , pipes-concurrency
+
+             , portaudio
 
   -- ,
   -- , transformers
@@ -70,9 +83,6 @@ library
   -- , stm
   -- , template-haskell
 
-  , deepseq
-  , hashable
-  , semigroups
   -- ,
   -- , lens
   -- , exceptions
