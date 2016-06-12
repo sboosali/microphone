@@ -134,7 +134,7 @@ defaultOpenStream  = OpenStream{..}
   sInput           = Nothing
   sOutput          = Nothing
   sSampleRate      = DEFAULT_SAMPLE_RATE
-  sFramesPerBuffer = Nothing
+  sFramesPerBuffer = Nothing -- e.g. Just 0x800
   sFlags           = []
   sCallback        = Nothing
   sFinalizer       = Nothing
@@ -171,7 +171,7 @@ defaultStreamParameters :: PaDeviceIndex -> StreamParameters i
 defaultStreamParameters spDevice = StreamParameters{..}
  where
  spChannelCount     = fromIntegral DEFAULT_CHANNEL_COUNT
- spSuggestedLatency = PaTime 0.0
+ spSuggestedLatency = PaTime 0.1 -- TODO units? if 0?
 
 --old {{ StreamFormat i => }} Unnecessary, and harmed inference
 

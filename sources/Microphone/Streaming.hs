@@ -9,7 +9,7 @@ import "Control.Concurrent" ('forkIO')
 import "Data.Int"           ('Data.Int.Int16')
 
 main = do
-  audio <- listenUntilUserPressesReturn 'defaultMicrophoneConfig'
+  audio <- 'Microphone.Example.listenUntilUserPressesReturn' 'defaultMicrophoneConfig'
   print audio
 
 listenUntilUserPressesReturn :: 'MicrophoneConfig' Int16 -> IO [Int16]
@@ -31,6 +31,8 @@ e.g. Streaming. Get chunks of raw audio data from a microphone:
 TODO
 @
 
+See "Microphone.Example", these examples are built with this package.
+
 (the @portaudio@ library is symmetric with respect to input/output device. So, the functions here should work for writing audio to the "speakers", with some minimal modifications. e.g. reading from instead of writing to the channel.)
 
 -}
@@ -50,6 +52,7 @@ import Control.Concurrent.STM
 import Foreign (ForeignPtr, peekArray,withForeignPtr, mallocForeignPtrArray)
 import qualified Data.Sequence as Sequence
 import Data.Sequence (Seq)
+import System.IO
 
 {-|
 
@@ -65,16 +68,15 @@ TODO Use pipes For streaming
 
 -}
 getMicrophoneContents :: forall i. MicrophoneEnvironment i -> IO [i]
-getMicrophoneContents microphone = toList <$> go Sequence.empty
+getMicrophoneContents MicrophoneEnvironment{..} = toList <$> go Sequence.empty
   where
   go :: Seq i -> IO (Seq i)
   go is = do
-    isMicrophoneOn microphone >>= \case
-      True  -> do
-        js <- readMicrophone microphone
-        go (is <> Sequence.fromList js) -- right-append
-      False -> do
+    (atomically $ tryReadTChan mChannel) >>= \case
+      Nothing -> do
         return is
+      Just js -> do
+        go (is <> Sequence.fromList js) -- right-append
 
   --old
   -- () <- whileMicrophoneOn environment (pause 1) -- block, checking every millisecond
@@ -94,7 +96,9 @@ listenMicrophone config = do
   _ <- forkIO $ void $ withPortAudio $ do
       streamConfig <- fromMicrophoneConfig config
       withStream' streamConfig $ \stream -> do -- TODO managed
+          Nothing <- startStream stream -- TODO Partial
           _ <- writingMicrophone environment stream
+          Nothing <- stopStream stream -- TODO Needed?
           return OK
 
   return environment
@@ -126,6 +130,7 @@ readMicrophone MicrophoneEnvironment{..} = do
 writingMicrophone :: (StreamFormat i) => MicrophoneEnvironment i -> Stream i i -> PortAudio ()
 writingMicrophone environment stream = do
   _ <- whileMicrophoneOn environment $ do
+    pause 10
     void $ writeMicrophone environment stream
   return OK
 
@@ -138,7 +143,9 @@ whileMicrophoneOn environment m =
 -}
 isMicrophoneOn :: MicrophoneEnvironment i -> IO Bool
 isMicrophoneOn MicrophoneEnvironment{..} = do
-  atomically $ readTVar mSwitch
+  b <- atomically $ readTVar mSwitch
+--  print b
+  return b
 
 {-| read from the portaudio buffer, and send it to the channel
 
@@ -148,6 +155,8 @@ writeMicrophone MicrophoneEnvironment{..} stream = do
     Right nSamples <- readAvailable stream --TODO partial
     let nChannels = fromIntegral $ mConfig&mChannelCount
     let size = nChannels * nSamples
+
+    nSamples & \x -> if x >= 0 then putStr (show x) >> putStr " " >> hFlush stdout else nothing
 
     buffer <- mallocForeignPtrArray size
         --NOTE mallocForeignPtrArray is resource-safe
@@ -162,8 +171,11 @@ writeMicrophone MicrophoneEnvironment{..} stream = do
 sendMicrophone :: (StreamFormat i) => TChan [i] -> (Int, ForeignPtr i) -> IO ()
 sendMicrophone channel (size,_buffer) = withForeignPtr _buffer $ \buffer -> do
   is <- peekArray size buffer
+--  print $ length is
   atomically $ writeTChan channel is
   -- StreamFormat subclasses Storable
+
+--old   traverse_ print is -- needs Show i
 
 -- TODO Stream i Void i.e. ignore speakers. Like type-level Nothing.
 
@@ -199,7 +211,7 @@ getDefaultInputStream :: IO PaDeviceIndex --TODO PortAudio
 getDefaultInputStream = do
   (device,_) <- getDefaultInputInfo >>= \case --  (defaultInputDevice,_) <- getDefaultInputInfo --TODO EitherT
 
-    Left e -> fail (show e) -- throwM e
+    Left e -> fail (show e) -- TODO throwM e
     Right a -> return a
 
   return device
