@@ -56,6 +56,7 @@ library
                  Microphone.Types
                  Microphone.Streaming
                  Microphone.PortAudio
+                 Microphone.Save
                  Microphone.Orphans
 
 -- other-modules:
@@ -68,6 +69,9 @@ library
              , containers
              , mtl
              , transformers
+
+             , bytestring
+             , binary
 
              , deepseq
              , hashable

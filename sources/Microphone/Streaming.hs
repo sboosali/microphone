@@ -67,7 +67,7 @@ blocks until 'silenceMicrophone' (i.e. /not/ lazy-IO i.e. unlike 'getContents').
 TODO Use pipes For streaming
 
 -}
-getMicrophoneContents :: forall i. MicrophoneEnvironment i -> IO [i]
+getMicrophoneContents :: forall i. MicrophoneEnvironment i -> IO [i] -- TODO Array. Or expose seq? What can be efficiently converted to bytestring? Several seconds of audio is about hundreds of thousands of bytes.
 getMicrophoneContents MicrophoneEnvironment{..} = toList <$> go Sequence.empty
   where
   go :: Seq i -> IO (Seq i)
@@ -131,9 +131,16 @@ writingMicrophone :: (StreamFormat i) => MicrophoneEnvironment i -> Stream i i -
 writingMicrophone environment stream = do
   _ <- whileMicrophoneOn environment $ do
     pause 10
+    displayVolume stream
     void $ writeMicrophone environment stream
   return OK
 
+displayVolume :: Stream i i -> IO () --TODO Actually display the volume, and purify. Maybe with bidirectional pipes? 
+displayVolume _ = _display "."
+  where
+  _display x = putStr x >> putStr " " >> hFlush stdout
+
+-- |
 whileMicrophoneOn :: MicrophoneEnvironment i -> (IO () -> IO ())
 whileMicrophoneOn environment m =
   whileM (environment&isMicrophoneOn) m
@@ -156,7 +163,7 @@ writeMicrophone MicrophoneEnvironment{..} stream = do
     let nChannels = fromIntegral $ mConfig&mChannelCount
     let size = nChannels * nSamples
 
-    nSamples & \x -> if x >= 0 then putStr (show x) >> putStr " " >> hFlush stdout else nothing
+    --DEBUG nSamples & \x -> if x >= 0 then putStr (show x) >> putStr " " >> hFlush stdout else nothing
 
     buffer <- mallocForeignPtrArray size
         --NOTE mallocForeignPtrArray is resource-safe

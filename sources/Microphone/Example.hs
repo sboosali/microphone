@@ -4,7 +4,10 @@ import Microphone
 
 import Data.Int           (Int16)
 -- import Control.Concurrent (forkIO)
-import Control.Exception  (finally)
+--import Control.Exception  (finally)
+import System.Environment (getArgs)
+import Data.Function ((&))
+import Data.Maybe (listToMaybe)
 
 {-|
 @
@@ -19,10 +22,19 @@ main = do
   --    return $ Right ()
   -- return ()
 
+  path <- _getFilePath
+
   audio <- listenUntilUserPressesReturn defaultMicrophoneConfig
 
-  print audio `finally` do -- So you can still see the length after a user interrupt, without scrolling up
-      print $ length audio
+  putStrLn "(saving...)"
+  saveAudio_LINEAR16 path audio
+  putStrLn $ "(saved: "++path++")"
+
+  where
+  _getFilePath :: IO FilePath
+  _getFilePath = do
+    args <- getArgs
+    return $ args & listToMaybe & maybe "microphone.l16" id
 
 -- |
 listenUntilUserPressesReturn :: MicrophoneConfig Int16 -> IO [Int16]
@@ -37,3 +49,4 @@ listenUntilUserPressesReturn config = do
 
   audio <- getMicrophoneContents microphone
   return audio
+  
