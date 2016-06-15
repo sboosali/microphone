@@ -1,4 +1,4 @@
-resolver: lts-6.2
+resolver: lts-5.15
 
 packages:
 - .
@@ -8,7 +8,16 @@ extra-deps:
 - binary-0.8.2.1
 # - logging-effect-1.0.1
 
+# # https://github.com/commercialhaskell/stack/blob/master/doc/nix_integration.md
 # nix:
 #   enable: true
-#   packages:
-#   - portaudio-19-20140130
+#   packages: [portaudio,libiconv]
+# #  packages: ["portaudio-19-20140130"]
+
+    # Configuring portaudio-0.2.4...
+    # Building portaudio-0.2.4...
+    # Preprocessing library portaudio-0.2.4...
+    # ld: malformed mach-o, symbol table not in __LINKEDIT file '/nix/store/01a8nfwswqra5szdrd76di2x7cv3910c-libiconv-osx-10.9.5/lib/libiconv.dylib' for architecture x86_64
+    # clang: error: linker command failed with exit code 1 (use -v to see invocation)
+    # linking .stack-work/dist/x86_64-osx-nix/Cabal-1.22.5.0/build/Sound/PortAudio/Base_hsc_make.o failed (exit code 1)
+    # command was: /usr/bin/gcc .stack-work/dist/x86_64-osx-nix/Cabal-1.22.5.0/build/Sound/PortAudio/Base_hsc_make.o .stack-work/dist/x86_64-osx-nix/Cabal-1.22.5.0/build/Sound/PortAudio/Base_hsc_utils.o -o .stack-work/dist/x86_64-osx-nix/Cabal-1.22.5.0/build/Sound/PortAudio/Base_hsc_make -m64 -L/nix/store/g2xpd8z4drs9ylahrc28hc29y12a8isq-ghc-7.10.3/lib -L/nix/store/l8f1kmnvqsygvwfxsm6wn25lw5g961rb-portaudio-19-20140130/lib -lportaudio -L/nix/store/g2xpd8z4drs9ylahrc28hc29y12a8isq-ghc-7.10.3/lib/ghc-7.10.3/conta_2C3ZI8RgPO2LBMidXKTvIU -L/nix/store/g2xpd8z4drs9ylahrc28hc29y12a8isq-ghc-7.10.3/lib/ghc-7.10.3/deeps_6vMKxt5sPFR0XsbRWvvq59 -L/nix/store/g2xpd8z4drs9ylahrc28hc29y12a8isq-ghc-7.10.3/lib/ghc-7.10.3/array_67iodizgJQIIxYVTp4emlA -L/nix/store/g2xpd8z4drs9ylahrc28hc29y12a8isq-ghc-7.10.3/lib/ghc-7.10.3/base_HQfYBxpPvuw8OunzQu6JGM -L/nix/store/01a8nfwswqra5szdrd76di2x7cv3910c-libiconv-osx-10.9.5/lib -liconv -L/nix/store/g2xpd8z4drs9ylahrc28hc29y12a8isq-ghc-7.10.3/lib/ghc-7.10.3/integ_2aU3IZNMF9a7mQ0OzsZ0dS -L/nix/store/9h0y52vcpf74w141ynlb7i6gil3qscqa-gmp-6.1.0/lib -lgmp -L/nix/store/g2xpd8z4drs9ylahrc28hc29y12a8isq-ghc-7.10.3/lib/ghc-7.10.3/ghcpr_8TmvWUcS1U1IKHT0levwg3 -L/nix/store/g2xpd8z4drs9ylahrc28hc29y12a8isq-ghc-7.10.3/lib/ghc-7.10.3/rts -lm -ldl
