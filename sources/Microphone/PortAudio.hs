@@ -14,7 +14,7 @@ import Sound.PortAudio
 --import Sound.PortAudio.Base
 --import Control.Monad.Managed
 import Control.Monad.Trans.Either
-import Control.Monad.Log
+--import Control.Monad.Log
 -- import Control.Error
 
 import Control.Exception (throwIO)
@@ -30,14 +30,16 @@ TODO ReaderT IsFatal
 
 -}
 newtype PortAudio' a = PortAudio { getPortAudio ::
- EitherT Error (LoggingT Warnings IO) a
--- LoggingT Warnings (EitherT Error IO) a
+ PortAudio'' a
+-- EitherT Error (LoggingT Warnings IO) a
  } deriving
   ( Functor, Applicative, Monad
   , MonadIO
   , MonadError Error
 --  , MonadLog Warnings
   )
+
+type PortAudio'' = EitherT Error (IO)
 
 {-old
 
@@ -93,7 +95,7 @@ suppressErrors isFatal = alaPortAudio $ suppress isFatal (const nothing) -- TODO
 --old   onFailure e = if isFatal e then throwError e else return ()
 
 alaPortAudio
- :: (EitherT Error (LoggingT Warnings IO) a -> EitherT Error (LoggingT Warnings IO) b) -> (PortAudio' a -> PortAudio' b)
+ :: (PortAudio'' a -> PortAudio'' b) -> (PortAudio' a -> PortAudio' b)
 alaPortAudio f = getPortAudio >>> f >>> PortAudio
 
 -- | @= 'const' True@
@@ -118,22 +120,22 @@ Provide handlers for any warnings and for the error.
 -}
 runPortAudio
   :: IsFatal
-  -> Handler IO Warnings
+--  -> Handler IO Warnings
   -> (Either Error a -> IO b)
   -> PortAudio' a
   -> IO b
-runPortAudio isError useWarnings useErrors
+-- runPortAudio isError useWarnings useErrors
+runPortAudio _isError useErrors
     = getPortAudio
  >>> runEitherT
  >>> (>>= (useErrors>>>liftIO))
- >>> (runLoggingT&flip) (useWarnings)
 
 {-| For testing: print warnings and throw the error.
 -}
 runPortAudioSimple :: PortAudio' a -> IO a
 runPortAudioSimple = runPortAudio
  allFatal
- (getWarnings >>> traverse_ print)
+-- (getWarnings >>> traverse_ print)
  (either throwIO return)
 
 {-| Recover the original @portaudio@ API: ignore warnings and pass the error through.
@@ -141,7 +143,7 @@ runPortAudioSimple = runPortAudio
 runPortAudioIgnoring :: PortAudio' a -> IO (Either Error a)
 runPortAudioIgnoring = runPortAudio
  allFatal
- (const . return $ ())
+-- (const . return $ ())
  return
 
 --------------------------------------------------------------------------------

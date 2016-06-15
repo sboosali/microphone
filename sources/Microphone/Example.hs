@@ -3,9 +3,10 @@ module Microphone.Example where
 import Microphone
 
 import qualified Pipes.Prelude as P
+--import Pipes
 
 import Data.Int           (Int16)
--- import Control.Concurrent (forkIO)
+--import Control.Concurrent (forkIO)
 --import Control.Exception  (finally)
 import System.Environment (getArgs)
 import Data.Function ((&))
@@ -31,6 +32,7 @@ main = do
   putStrLn "(saving...)"
   saveAudio_LINEAR16 path audio
   putStrLn $ "(saved: "++path++")"
+  putStrLn $ "(bytes: "++(show $ length audio)++")"
 
   where
   _getFilePath :: IO FilePath
@@ -43,6 +45,11 @@ listenUntilUserPressesReturn :: MicrophoneConfig Int16 -> IO [Int16]
 listenUntilUserPressesReturn config = do
 
   environment <- listenMicrophone config  -- start
+
+  -- TODO make separate example
+  -- _ <- forkIO $ runEffect $ microphone environment >-> P.map show >-> P.stdoutLn
+  -- Streaming works
+
   putStrLn "(listening...)"
 
   _ <- getLine                            -- blocks
@@ -51,6 +58,5 @@ listenUntilUserPressesReturn config = do
 
   -- audio <- getMicrophoneContents environment
   audio <- P.toListM (microphone environment) -- TODO stops when silenced
-  print $ length audio
 
   return audio

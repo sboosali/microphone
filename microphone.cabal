@@ -71,7 +71,8 @@ library
              , transformers
 
              , bytestring
-             , binary
+             , binary >=0.8.1
+               -- for all putters of different signedness/endianness
 
              , deepseq
              , hashable
@@ -79,10 +80,12 @@ library
 
              , either
              , managed
-             , logging-effect
+--             , logging-effect
+             , errors
+
              , pipes
              -- , pipes-concurrency
-             , errors
+             , pipes-group
 
              , portaudio
 

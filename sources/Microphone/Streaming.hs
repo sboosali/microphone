@@ -73,6 +73,16 @@ microphone environment = loop
          each is
          loop            -- continue
 
+{-TODO
+
+Producer i IO ()
+
+Producer [i] IO () with pipes-group
+
+
+-}
+
+
 {-|
 
 -}
