@@ -13,6 +13,7 @@ import Sound.PortAudio.Base
 -- import Data.Word (Word8)
 import Control.Concurrent.STM
 import Numeric.Natural
+import Control.Concurrent.STM.TMChan
 
 --------------------------------------------------------------------------------
 
@@ -26,7 +27,8 @@ data MicrophoneEnvironment i = MicrophoneEnvironment
  }
 -- TODO TChan (Maybe [i]) ??? For The pipes producer.
 
-type MicrophoneChannel i = TChan (Maybe [i])
+type MicrophoneChannel i = TChan (Maybe [i])-- TMChan [i]
+
 
 --TODO rename to microphone
 
@@ -116,10 +118,10 @@ data OpenStream input output = OpenStream
 defaultMicrophoneConfig :: MicrophoneConfig i
 defaultMicrophoneConfig = MicrophoneConfig{..}
   where
-  mSampleRate = DEFAULT_SAMPLE_RATE
+  mSampleRate   = DEFAULT_SAMPLE_RATE
   mChannelCount = DEFAULT_CHANNEL_COUNT
-  mInputDevice = DEFAULT_INPUT_DEVICE
-  mFlags      = []
+  mInputDevice  = DEFAULT_INPUT_DEVICE
+  mFlags        = []
 
 {-|
 @

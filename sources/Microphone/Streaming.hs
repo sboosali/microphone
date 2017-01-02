@@ -179,7 +179,7 @@ writingMicrophone :: (StreamFormat i) => MicrophoneEnvironment i -> Stream i i -
 writingMicrophone environment stream = do
   _ <- whileMicrophoneOn environment $ do
     pause 10
-    _displayVolume stream
+    _displayVolume stream -- TODO rm
     void $ writeMicrophone environment stream
   return OK
 
@@ -211,9 +211,9 @@ writeMicrophone MicrophoneEnvironment{..} stream = do
 
     --DEBUG nSamples & \x -> if x >= 0 then putStr (show x) >> putStr " " >> hFlush stdout else nothing
 
-    when (nSamples >= 0) $ do -- skip consumption, when there's no data
+    when (nSamples >= 0) $ do -- skip consumption, when there's no data (TODO?)
         buffer <- mallocForeignPtrArray size
-            --NOTE mallocForeignPtrArray is resource-safe
+            --NOTE mallocForeignPtrArray is resource-safe, i.e ?
         _ <- readStream stream (fromIntegral nSamples) buffer
         sendMicrophone mChannel (size,buffer)
         return ()
@@ -327,6 +327,28 @@ $ du *
 @
 
 RAW Audio format or just RAW Audio is an audio file format for storing uncompressed audio in raw form. Comparable to WAV or AIFF in size, RAW Audio file does not include any header information (sampling rate, bit depth, endian, or number of channels). Data can be written in PCM, IEEE 754 or ASCII.[citation needed]
+
+
+
+
+on nixos, crashed on second run (the first-run I control-c'd):
+
+ALSA lib pcm.c:2337:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
+ALSA lib pcm.c:2337:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
+ALSA lib pcm.c:2337:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
+ALSA lib pcm.c:2337:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.surround71
+ALSA lib setup.c:548:(add_elem) Cannot obtain info for CTL elem (MIXER,'IEC958 Playback Default',0,0,0): No such file or directory
+ALSA lib setup.c:548:(add_elem) Cannot obtain info for CTL elem (MIXER,'IEC958 Playback Default',0,0,0): No such file or directory
+ALSA lib setup.c:548:(add_elem) Cannot obtain info for CTL elem (MIXER,'IEC958 Playback Default',0,0,0): No such file or directory
+ALSA lib pcm.c:2337:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.hdmi
+ALSA lib pcm.c:2337:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.hdmi
+ALSA lib pcm.c:2337:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.modem
+ALSA lib pcm.c:2337:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.modem
+ALSA lib pcm.c:2337:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline
+ALSA lib pcm.c:2337:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline
+
+But then after rebooting, it worked, even with the same error.
+
 
 
 -}

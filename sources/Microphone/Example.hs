@@ -13,9 +13,15 @@ import Data.Function ((&))
 import Data.Maybe (listToMaybe)
 
 {-|
+
 @
-stack build && stack exec -- example-microphone
+stack build && stack exec -- example-microphone audio.l16
+
+aplay --file-type wav --format=S16_LE --channels=1 --rate=16000 audio.l16
+# "S16_LE" means "Signed / 16 bits per sample (i.e. Int16), little-endian"
+# 'defaultMicrophoneConfig' uses a mono channel and a 16kHz sample rate
 @
+
 -}
 main = do
 
@@ -38,7 +44,7 @@ main = do
   _getFilePath :: IO FilePath
   _getFilePath = do
     args <- getArgs
-    return $ args & listToMaybe & maybe "microphone.l16" id
+    return $ args & listToMaybe & maybe "audio.l16" id
 
 -- |
 listenUntilUserPressesReturn :: MicrophoneConfig Int16 -> IO [Int16]

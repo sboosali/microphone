@@ -66,6 +66,7 @@ library
  build-depends:
                base >=4.7 && <5
              , stm
+             , stm-chans
              , containers
              , mtl
              , transformers
@@ -88,6 +89,8 @@ library
              , pipes-group
 
              , portaudio
+
+             , optparse-generic
 
   -- ,
   -- , transformers

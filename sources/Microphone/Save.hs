@@ -18,6 +18,10 @@ putInt16le
 putInt32le
 putFloatle
 
+TODO
+
+Vector Int16
+
 -}
 module Microphone.Save where
 import Microphone.Extra
