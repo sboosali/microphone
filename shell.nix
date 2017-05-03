@@ -1,19 +1,22 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "default" }:
+with (import <nixpkgs> {});
+(haskellPackages.callPackage ./. {}).env
 
-let
+# { nixpkgs ? import <nixpkgs> {}, compiler ? "default" }:
 
-  inherit (nixpkgs) pkgs;
+# let
 
-  f = import ./default.nix;
+#   inherit (nixpkgs) pkgs;
 
-  haskellPackages = if compiler == "default"
-                       then pkgs.haskellPackages
-                       else pkgs.haskell.packages.${compiler};
+#   f = import ./default.nix;
 
-  drv = haskellPackages.callPackage f {};
+#   haskellPackages = if compiler == "default"
+#                        then pkgs.haskellPackages
+#                        else pkgs.haskell.packages.${compiler};
 
-in
+#   drv = haskellPackages.callPackage f {};
 
-  if pkgs.lib.inNixShell then drv.env else drv
+# in
+
+#   if pkgs.lib.inNixShell then drv.env else drv
 
  

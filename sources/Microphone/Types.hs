@@ -13,7 +13,6 @@ import Sound.PortAudio.Base
 -- import Data.Word (Word8)
 import Control.Concurrent.STM
 import Numeric.Natural
-import Control.Concurrent.STM.TMChan
 
 --------------------------------------------------------------------------------
 

@@ -6,7 +6,7 @@ nix:
   pure: true
   packages: [portaudio]
   # shell-file: shell.nix
-  
+ 
 packages:
 - .
 

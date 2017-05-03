@@ -51,7 +51,7 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Foreign (ForeignPtr, peekArray,withForeignPtr, mallocForeignPtrArray)
 --import qualified Data.Sequence as Sequence
-import Data.Sequence (Seq)
+--import Data.Sequence (Seq)
 import System.IO
 
 {-|
