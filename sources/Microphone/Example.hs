@@ -8,6 +8,7 @@
 
 @
 stack build && stack exec -- example-microphone audio.wav
+cabal build && cabal exec -- example-microphone audio.wav
 
 aplay --file-type wav --format=S16_LE --channels=1 --rate=16000 audio.l16
 # "S16_LE" means "Signed / 16 bits per sample (i.e. Int16), little-endian"
